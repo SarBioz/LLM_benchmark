@@ -1,111 +1,86 @@
-## Flow chart (Frozen Transformer Encoder Pipeline)
+# Transformer Encoder Benchmark
 
-+-------------------------------+
-|            START              |
-+-------------------------------+
-               |
-               v
-+-------------------------------+
-| Load parquet dataset shards   |
-| data_io.py                    |
-| - load_people_speech_parquet  |
-+-------------------------------+
-               |
-               v
-+-----------------------------------------------+
-| Build transcript table                         |
-| data_io.py                                    |
-| - dataset_to_transcripts_df                   |
-|                                               |
-| NO preprocessing                              |
-| NO word-based chunking                        |
-+-----------------------------------------------+
-               |
-               v
-+-----------------------------------------------+
-| Assign debug labels (optional)                 |
-| labels_debug.py                               |
-| - assign_random_labels_per_participant         |
-| - save_participant_label_map                  |
-+-----------------------------------------------+
-               |
-               v
-+-----------------------------------------------+
-| Binary label mapping                           |
-| Label_binary.py                               |
-| NC → 0, (CIND, AD) → 1                        |
-+-----------------------------------------------+
-               |
-               v
-+-----------------------------------------------+
-| Participant-level split (leakage-safe)         |
-| splits.py                                     |
-| - make_participant_splits                     |
-| - attach_splits                               |
-|                                               |
-| Output: train / val / test                    |
-+-----------------------------------------------+
-               |
-               v
-+================================================+
-|        FOR EACH FROZEN ENCODER MODEL            |
-|        (loop in main_encoder.py)                |
-+================================================+
-               |
-               v
-+-----------------------------------------------+
-| Load tokenizer + encoder                      |
-| hf_encoder.py                                 |
-| - load_frozen_encoder                         |
-|                                               |
-| Encoder weights FROZEN                        |
-+-----------------------------------------------+
-               |
-               v
-+-----------------------------------------------+
-| Embed transcripts                             |
-| embedder.py                                   |
-| - embed_dataframe                             |
-|                                               |
-| Token-level chunking ONLY if > max_length     |
-| Mean pooling (last hidden states)             |
-| Mean over chunks → 1 vector / transcript      |
-+-----------------------------------------------+
-               |
-               v
-+-----------------------------------------------+
-| Save embeddings                               |
-| main_encoder.py                               |
-| - embeddings_<model>.npy                      |
-+-----------------------------------------------+
-               |
-               v
-+-----------------------------------------------+
-| Train classifier head                         |
-| classifier_head.py                            |
-| - Logistic Regression (baseline)              |
-+-----------------------------------------------+
-               |
-               v
-+-----------------------------------------------+
-| Evaluate model                                |
-| eval_utils.py                                 |
-| - accuracy, F1, AUC                           |
-+-----------------------------------------------+
-               |
-               v
-+================================================+
-|            END MODEL LOOP                      |
-+================================================+
-               |
-               v
-+-----------------------------------------------+
-| Save results table                            |
-| main_encoder.py                               |
-| - results_encoder.csv                         |
-+-----------------------------------------------+
-               |
-               v
-+-------------------------------+
-|              END              |
-+-------------------------------+
+Compare frozen pretrained transformer encoders as feature extractors
+for binary cognitive-health classification.
+
+## Architecture
+
+```
+Raw Text
+  │
+  ├─ Tokenizer (model-specific, paired with pretrained model)
+  │
+  ├─ Chunking (shared: 512 tokens, 64 overlap)
+  │
+  ├─ Frozen Pretrained Model ← VARIABLE (swapped per benchmark run)
+  │
+  ├─ Mean Pooling (shared: within-chunk + across-chunk)
+  │
+  ├─ Feature Vector (H-dimensional, saved to results/features/)
+  │
+  ├─ Classifier (shared: StandardScaler + LogReg)
+  │
+  └─ Evaluation (accuracy, F1, AUC)
+```
+
+## Project Structure
+
+```
+Transformer_encder/
+├── benchlib/                    # Shared benchmark library
+│   ├── __init__.py
+│   ├── data_io.py               # Data loading (parquet)
+│   ├── labels.py                # Label assignment + binary conversion
+│   ├── splits.py                # Participant-level train/val/test splitting
+│   ├── chunking.py              # Token-level chunking strategy
+│   ├── feature_extraction.py    # Frozen model forward pass + pooling
+│   ├── classifier.py            # Unified classifier head
+│   └── eval_utils.py            # Evaluation metrics
+│
+├── models/                      # One file per pretrained model
+│   ├── __init__.py              # MODEL_REGISTRY
+│   ├── bert_tiny.py             # prajjwal1/bert-tiny (128-d)
+│   ├── distilbert.py            # distilbert-base-uncased (768-d)
+│   ├── albert.py                # albert-base-v2 (768-d)
+│   └── distilroberta.py         # distilroberta-base (768-d)
+│
+├── results/                     # Output (auto-created)
+│   ├── features/                # Saved feature vectors per model/split
+│   └── results.csv              # Comparison table
+│
+├── config.py                    # Central configuration
+├── run_benchmark.py             # Main entrypoint
+├── REFACTOR_PLAN.md             # Refactoring plan
+└── PROGRESS.md                  # Progress tracker
+```
+
+## Usage
+
+```bash
+conda activate nlp_gpu
+python run_benchmark.py
+```
+
+## Adding a New Model
+
+1. Create `models/new_model.py`:
+   ```python
+   MODEL_ID = "huggingface/model-name"
+   MODEL_NAME = "Display Name"
+   ```
+2. Register it in `models/__init__.py`
+3. Run `python run_benchmark.py`
+
+## Configuration
+
+Edit `config.py` to change settings that apply to **all** models:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| SEED | 42 | Random seed everywhere |
+| MAX_ROWS | 2000 | Max transcripts to load |
+| TRAIN/VAL/TEST_FRAC | 0.70/0.15/0.15 | Participant-level splits |
+| MAX_LENGTH | 512 | Token chunk size |
+| OVERLAP_TOKENS | 64 | Overlap between chunks |
+| CLASSIFIER | "logreg" | Classifier head: logreg, linear_svm, mlp |
+| SAVE_FEATURES | True | Save feature vectors to disk |
