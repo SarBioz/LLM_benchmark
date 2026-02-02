@@ -9,9 +9,9 @@
 | 1.2 Move `data_io.py` → `benchlib/data_io.py` | NOT STARTED | |
 | 1.3 Merge labels → `benchlib/labels.py` | NOT STARTED | |
 | 1.4 Move `splits.py` → `benchlib/splits.py` | NOT STARTED | |
-| 1.5 Extract tokenizer → `benchlib/tokenizer.py` | NOT STARTED | |
-| 1.6 Refactor embedding → `benchlib/embedder.py` | NOT STARTED | |
-| 1.7 Create `benchlib/loss.py` | NOT STARTED | |
+| 1.5 Create `benchlib/chunking.py` | NOT STARTED | Extracted from embedder.py |
+| 1.6 Create `benchlib/feature_extraction.py` | NOT STARTED | Frozen model + pooling → feature vectors |
+| 1.7 Create `benchlib/classifier.py` | NOT STARTED | Renamed from loss.py — unified classifier head |
 | 1.8 Move `eval_utils.py` → `benchlib/eval_utils.py` | NOT STARTED | |
 
 ## Phase 2: Central config
@@ -33,7 +33,7 @@
 |------|--------|-------|
 | 4.1 Create `run_benchmark.py` | NOT STARTED | |
 
-## Phase 5: Cleanup
+## Phase 5: Cleanup & verify
 | Task | Status | Notes |
 |------|--------|-------|
 | 5.1 Delete old top-level files | NOT STARTED | |
