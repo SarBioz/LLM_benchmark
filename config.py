@@ -21,6 +21,15 @@ MAX_LENGTH = 512
 OVERLAP_TOKENS = 64
 POOLING = "mean"
 
+# --- Linguistic Features (Mobtahej et al. 2024) ---
+# When True, concatenate 5 linguistic features with BERT embeddings:
+#   1. Vocabulary Richness (TTR)
+#   2. Average Word Length
+#   3. Semantic Coherence (BERT-enhanced)
+#   4. Syntactic Complexity (MLU)
+#   5. Content Density
+USE_LINGUISTIC_FEATURES = True
+
 # --- Classifier (same for all models) ---
 CLASSIFIER = "logreg"  # "logreg" | "linear_svm" | "mlp"
 

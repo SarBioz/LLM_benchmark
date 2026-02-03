@@ -17,7 +17,7 @@ from benchlib.labels import (
     make_binary_label,
 )
 from benchlib.splits import make_participant_splits, attach_splits
-from benchlib.feature_extraction import extract_features_batch
+from benchlib.feature_extraction import extract_features_batch, extract_combined_features_batch
 from benchlib.classifier import train_classifier
 from benchlib.eval_utils import eval_binary
 
@@ -72,6 +72,7 @@ def main():
     y_test  = test_df["y"].to_numpy().astype(int)
 
     print(f"Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
+    print(f"Linguistic features: {'Enabled (Mobtahej et al.)' if config.USE_LINGUISTIC_FEATURES else 'Disabled'}")
 
     # ── 4) Benchmark loop ──
     results_rows = []
@@ -85,18 +86,21 @@ def main():
 
         model, tokenizer = load_frozen_model(model_id, device)
 
-        # a) Extract feature vectors
-        X_train = extract_features_batch(
+        # a) Extract feature vectors (BERT + optional linguistic features)
+        X_train = extract_combined_features_batch(
             train_df["text"].tolist(), model, tokenizer, device,
             max_length=config.MAX_LENGTH, overlap=config.OVERLAP_TOKENS,
+            use_linguistic=config.USE_LINGUISTIC_FEATURES,
         )
-        X_val = extract_features_batch(
+        X_val = extract_combined_features_batch(
             val_df["text"].tolist(), model, tokenizer, device,
             max_length=config.MAX_LENGTH, overlap=config.OVERLAP_TOKENS,
+            use_linguistic=config.USE_LINGUISTIC_FEATURES,
         )
-        X_test = extract_features_batch(
+        X_test = extract_combined_features_batch(
             test_df["text"].tolist(), model, tokenizer, device,
             max_length=config.MAX_LENGTH, overlap=config.OVERLAP_TOKENS,
+            use_linguistic=config.USE_LINGUISTIC_FEATURES,
         )
 
         print(f"Feature vector dim: {X_train.shape[1]}")
@@ -124,6 +128,7 @@ def main():
             "model": model_id,
             "model_name": model_name,
             "feature_dim": X_train.shape[1],
+            "linguistic_features": config.USE_LINGUISTIC_FEATURES,
             "pooling": config.POOLING,
             "max_length": config.MAX_LENGTH,
             "overlap_tokens": config.OVERLAP_TOKENS,
