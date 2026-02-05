@@ -73,40 +73,46 @@ python run_benchmark.py
 
 ## Features Extracted
 
-The pipeline extracts two types of features from each transcript:
+The pipeline extracts features from each transcript using both transformer output and direct text analysis:
 
-### 1. Linguistic Features (directly from transcript text)
+### 1. Features from Transformer Output (BERT-based)
 
-| # | Feature | Description | Formula |
-|---|---------|-------------|---------|
-| 1 | `semantic_coherence` | Avg cosine similarity between consecutive sentence embeddings | `(1/(N-1)) * Σ cos(e_i, e_{i+1})` |
-| 2 | `sentiment_score` | Average sentiment score across sentences | `(1/N) * Σ p_i` |
-| 3 | `num_sentences` | Number of sentences in transcript | Count |
-| 4 | `grammar_error_rate` | Grammar errors divided by total words | `E / W` |
-| 5 | `avg_word_length` | Average character length of words | `(1/W) * Σ len(w_j)` |
-| 6 | `std_word_length` | Standard deviation of word lengths | Std dev |
-| 7 | `ttr` | Type-Token Ratio (vocabulary richness) | `V / N` |
-| 8 | `gttr` | Guiraud's Root TTR | `V / √N` |
-| 9 | `total_tokens` | Total number of word tokens | `N` |
-| 10 | `unique_types` | Number of unique words | `V` |
+| # | Feature | Source | Description | Formula |
+|---|---------|--------|-------------|---------|
+| 1 | `semantic_coherence` | Transformer | Avg cosine similarity between consecutive sentence embeddings | `(1/(N-1)) * Σ cos(e_i, e_{i+1})` |
+| 2 | `sentiment_score` | Transformer | Sentiment score computed from BERT embeddings | `(1/N) * Σ p_i` |
+| 11-H | `emb_0` to `emb_H` | Transformer | Full transcript embedding (mean of sentence embeddings) | `(1/N) * Σ e_i` |
 
-### 2. Transformer Embedding (from frozen pretrained model)
+### 2. Features from Direct Text Analysis (Traditional Linguistic)
 
-| Model | Embedding Dimensions |
-|-------|---------------------|
+| # | Feature | Source | Description | Formula |
+|---|---------|--------|-------------|---------|
+| 3 | `num_sentences` | Text | Number of sentences in transcript | Count |
+| 4 | `grammar_error_rate` | Text | Grammar errors divided by total words | `E / W` |
+| 5 | `avg_word_length` | Text | Average character length of words | `(1/W) * Σ len(w_j)` |
+| 6 | `std_word_length` | Text | Standard deviation of word lengths | Std dev |
+| 7 | `ttr` | Text | Type-Token Ratio (vocabulary richness) | `V / N` |
+| 8 | `gttr` | Text | Guiraud's Root TTR | `V / √N` |
+| 9 | `total_tokens` | Text | Total number of word tokens | `N` |
+| 10 | `unique_types` | Text | Number of unique words | `V` |
+
+### 3. Transformer Embedding Dimensions
+
+| Model | Embedding Dimensions (H) |
+|-------|--------------------------|
 | BERT-Tiny | 128 |
 | DistilBERT | 768 |
 | ALBERT | 768 |
 | DistilRoBERTa | 768 |
 
-The transformer embedding is computed by:
-1. Split transcript into sentences
-2. Get BERT embedding for each sentence (masked mean pooling)
-3. Average all sentence embeddings → transcript embedding
-
 ### Total Feature Vector
 
-**Total dimensions = 10 (linguistic) + H (transformer embedding)**
+| Source | Count |
+|--------|-------|
+| Transformer-derived scalar features | 2 (`semantic_coherence`, `sentiment_score`) |
+| Text-based scalar features | 8 |
+| Transformer embedding | H dimensions |
+| **Total** | **10 + H** |
 
 - BERT-Tiny: 10 + 128 = **138 features**
 - Other models: 10 + 768 = **778 features**
