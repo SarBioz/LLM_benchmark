@@ -75,12 +75,14 @@ python run_benchmark.py
 
 The pipeline extracts features from each transcript using both transformer output and direct text analysis:
 
-### 1. Features from Transformer Output (BERT-based)
+### 1. Features from Transformer Output (computed using each model)
+
+These features are computed using whichever transformer model is being benchmarked (BERT-Tiny, DistilBERT, ALBERT, or DistilRoBERTa):
 
 | # | Feature | Source | Description | Formula |
 |---|---------|--------|-------------|---------|
 | 1 | `semantic_coherence` | Transformer | Avg cosine similarity between consecutive sentence embeddings | `(1/(N-1)) * Σ cos(e_i, e_{i+1})` |
-| 2 | `sentiment_score` | Transformer | Sentiment score computed from BERT embeddings | `(1/N) * Σ p_i` |
+| 2 | `sentiment_score` | Transformer | Sentiment score computed from transformer embeddings | `(1/N) * Σ p_i` |
 | 11-H | `emb_0` to `emb_H` | Transformer | Full transcript embedding (mean of sentence embeddings) | `(1/N) * Σ e_i` |
 
 ### 2. Features from Direct Text Analysis (Traditional Linguistic)
