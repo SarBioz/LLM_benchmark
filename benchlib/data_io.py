@@ -11,23 +11,33 @@ import pandas as pd
 
 def load_text_files_from_folders(data_dir: str, max_rows: int = None) -> pd.DataFrame:
     """
-    Load text files from Normal/ and MCI/ subfolders.
+    Load text files from Normal/, MCI/, QCI/, and Dementia/ subfolders.
 
     Expected folder structure:
         data_dir/
             Normal/
                 English 1st Language/
                     file1.txt
-                    file2.txt
                     ...
             MCI/
                 English 1st Language/
                     file1.txt
-                    file2.txt
+                    ...
+            QCI/
+                English 1st Language/
+                    file1.txt
+                    ...
+            Dementia/
+                English 1st Language/
+                    file1.txt
                     ...
 
+    Classification:
+        - Normal → NC (0)
+        - MCI, QCI, Dementia → Impaired (1)
+
     Args:
-        data_dir: Path to the folder containing Normal/ and MCI/ subfolders
+        data_dir: Path to the folder containing the subfolders
         max_rows: Optional limit on total number of samples to load
 
     Returns:
@@ -70,8 +80,44 @@ def load_text_files_from_folders(data_dir: str, max_rows: int = None) -> pd.Data
     else:
         print(f"Warning: MCI folder not found at {mci_dir}")
 
+    # Load QCI folder → label "QCI"
+    qci_dir = os.path.join(data_dir, "QCI", "English 1st Language")
+    if os.path.exists(qci_dir):
+        qci_count_before = len(records)
+        for filename in os.listdir(qci_dir):
+            if filename.endswith(".txt"):
+                filepath = os.path.join(qci_dir, filename)
+                with open(filepath, "r", encoding="utf-8") as f:
+                    text = f.read()
+                records.append({
+                    "participant_id": filename.replace(".txt", ""),
+                    "text": text,
+                    "label": "QCI"
+                })
+        print(f"Loaded {len(records) - qci_count_before} files from QCI/English 1st Language/")
+    else:
+        print(f"Warning: QCI folder not found at {qci_dir}")
+
+    # Load Dementia folder → label "Dementia"
+    dementia_dir = os.path.join(data_dir, "Dementia", "English 1st Language")
+    if os.path.exists(dementia_dir):
+        dementia_count_before = len(records)
+        for filename in os.listdir(dementia_dir):
+            if filename.endswith(".txt"):
+                filepath = os.path.join(dementia_dir, filename)
+                with open(filepath, "r", encoding="utf-8") as f:
+                    text = f.read()
+                records.append({
+                    "participant_id": filename.replace(".txt", ""),
+                    "text": text,
+                    "label": "Dementia"
+                })
+        print(f"Loaded {len(records) - dementia_count_before} files from Dementia/English 1st Language/")
+    else:
+        print(f"Warning: Dementia folder not found at {dementia_dir}")
+
     if not records:
-        raise FileNotFoundError(f"No .txt files found in {data_dir}/Normal or {data_dir}/MCI")
+        raise FileNotFoundError(f"No .txt files found in {data_dir}")
 
     df = pd.DataFrame(records)
     df["chunk_id"] = 0
@@ -81,7 +127,16 @@ def load_text_files_from_folders(data_dir: str, max_rows: int = None) -> pd.Data
         df = df.sample(n=max_rows, random_state=42).reset_index(drop=True)
         print(f"Limited to {max_rows} samples")
 
-    print(f"Total samples: {len(df)} (NC={len(df[df['label']=='NC'])}, MCI={len(df[df['label']=='MCI'])})")
+    # Count by label
+    nc_count = len(df[df['label'] == 'NC'])
+    mci_count = len(df[df['label'] == 'MCI'])
+    qci_count = len(df[df['label'] == 'QCI'])
+    dementia_count = len(df[df['label'] == 'Dementia'])
+    impaired_total = mci_count + qci_count + dementia_count
+
+    print(f"Total samples: {len(df)}")
+    print(f"  NC (Normal): {nc_count}")
+    print(f"  Impaired: {impaired_total} (MCI={mci_count}, QCI={qci_count}, Dementia={dementia_count})")
     return df
 
 

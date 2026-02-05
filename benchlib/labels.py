@@ -12,12 +12,12 @@ def make_binary_label(
     src_label_col: str,
     out_col: str = "y",
     normal_label: str = "NC",
-    abnormal_labels=("MCI",),  # Real data only has MCI
+    abnormal_labels=("MCI", "QCI", "Dementia"),  # All impaired categories
 ) -> pd.DataFrame:
     """
-    Convert NC/MCI labels to binary (0/1).
+    Convert labels to binary (0/1).
     NC = 0 (Normal)
-    MCI = 1 (Impaired)
+    MCI, QCI, Dementia = 1 (Impaired)
     """
     df = df.copy()
 
