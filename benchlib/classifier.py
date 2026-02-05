@@ -59,9 +59,86 @@ def train_classifier(
     Returns
     -------
     Fitted sklearn Pipeline (scaler + classifier).
+
+    Usage
+    -----
+    clf = train_classifier(X_train, y_train)
+
+    # Get probability scores (0-1):
+    scores = get_impairment_scores(clf, X_test)
+
+    # Get binary predictions:
+    predictions = clf.predict(X_test)
     """
     if method not in _CLASSIFIERS:
         raise ValueError(f"Unknown classifier '{method}'. Choose from: {list(_CLASSIFIERS)}")
     clf = _CLASSIFIERS[method](seed)
     clf.fit(X_train, y_train)
     return clf
+
+
+def get_impairment_scores(clf, X: np.ndarray) -> np.ndarray:
+    """
+    Get cognitive impairment probability scores (0-1) for each sample.
+
+    Parameters
+    ----------
+    clf : Trained classifier (from train_classifier)
+    X   : (N, H) feature matrix
+
+    Returns
+    -------
+    scores : (N,) array of probability scores
+             0.0 = definitely NC (Normal Control)
+             1.0 = definitely Impaired (MCI/AD)
+             0.5 = uncertain
+
+    Example
+    -------
+    >>> scores = get_impairment_scores(clf, X_test)
+    >>> print(scores)
+    [0.12, 0.87, 0.45, 0.93, ...]  # Probability of impairment
+
+    >>> # Apply custom threshold
+    >>> threshold = 0.5
+    >>> predictions = (scores >= threshold).astype(int)
+    """
+    if hasattr(clf, 'predict_proba'):
+        # Logistic Regression, MLP - have probability output
+        return clf.predict_proba(X)[:, 1]
+    elif hasattr(clf, 'decision_function'):
+        # LinearSVC - use decision function, convert to pseudo-probability
+        from scipy.special import expit  # sigmoid
+        decision = clf.decision_function(X)
+        return expit(decision)
+    else:
+        # Fallback: just return predictions as 0/1
+        return clf.predict(X).astype(float)
+
+
+def predict_with_threshold(clf, X: np.ndarray, threshold: float = 0.5) -> np.ndarray:
+    """
+    Get binary predictions using a custom probability threshold.
+
+    Parameters
+    ----------
+    clf       : Trained classifier
+    X         : (N, H) feature matrix
+    threshold : Probability threshold (default 0.5)
+                Lower threshold = more sensitive (catches more impaired)
+                Higher threshold = more specific (fewer false positives)
+
+    Returns
+    -------
+    predictions : (N,) array of binary predictions (0 or 1)
+
+    Example
+    -------
+    >>> # High sensitivity (catch more impaired, even if some false positives)
+    >>> preds = predict_with_threshold(clf, X_test, threshold=0.3)
+
+    >>> # High specificity (fewer false positives, may miss some impaired)
+    >>> preds = predict_with_threshold(clf, X_test, threshold=0.7)
+    """
+    scores = get_impairment_scores(clf, X)
+    return (scores >= threshold).astype(int)

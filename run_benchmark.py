@@ -1,12 +1,20 @@
 # run_benchmark.py
 """Main entrypoint: runs all registered models through the shared
-benchmark pipeline and saves a comparison table."""
+benchmark pipeline and saves a comparison table.
+
+Updated to use combined features:
+- BERT transcript embedding (H dimensions)
+- Linguistic features (10 interpretable features)
+- Total: H + 10 dimensions
+"""
 
 import os
 import numpy as np
 import pandas as pd
 import torch
+import joblib
 from transformers import AutoTokenizer, AutoModel
+from typing import List, Tuple
 
 import config
 from models import MODEL_REGISTRY
@@ -18,7 +26,11 @@ from benchlib.labels import (
 )
 from benchlib.splits import make_participant_splits, attach_splits
 from benchlib.feature_extraction import extract_features_batch
-from benchlib.classifier import train_classifier
+from benchlib.linguistic_features import (
+    extract_all_linguistic_features,
+    get_feature_vector,
+)
+from benchlib.classifier import train_classifier, get_impairment_scores
 from benchlib.eval_utils import eval_binary
 
 
@@ -31,6 +43,72 @@ def load_frozen_model(model_id: str, device: str):
         p.requires_grad = False
     model.to(device)
     return model, tokenizer
+
+
+def extract_combined_features_single(
+    text: str,
+    model,
+    tokenizer,
+    device: str,
+    max_length: int = 512,
+) -> Tuple[np.ndarray, List[str]]:
+    """
+    Extract combined features for a single transcript.
+
+    Returns:
+        feature_vector: (10 + H,) array where:
+            - [0:10] = interpretable linguistic features
+            - [10:] = BERT transcript embedding
+        feature_names: List of feature names
+    """
+    # Extract all linguistic features (includes BERT embedding)
+    features = extract_all_linguistic_features(
+        text=text,
+        model=model,
+        tokenizer=tokenizer,
+        device=device,
+        use_language_tool=False,
+        max_length=max_length,
+    )
+
+    # Convert to flat feature vector
+    feature_vector, feature_names = get_feature_vector(features)
+
+    return feature_vector, feature_names
+
+
+def extract_combined_features_batch(
+    texts: List[str],
+    model,
+    tokenizer,
+    device: str,
+    max_length: int = 512,
+    verbose_every: int = 50,
+) -> Tuple[np.ndarray, List[str]]:
+    """
+    Extract combined features for a batch of transcripts.
+
+    Returns:
+        X: (N, 10 + H) feature matrix
+        feature_names: List of feature names
+    """
+    features_list = []
+    feature_names = None
+
+    for i, text in enumerate(texts):
+        fv, fn = extract_combined_features_single(
+            text, model, tokenizer, device, max_length
+        )
+        features_list.append(fv)
+
+        if feature_names is None:
+            feature_names = fn
+
+        if verbose_every and (i + 1) % verbose_every == 0:
+            print(f"  Extracted features {i + 1}/{len(texts)}")
+
+    X = np.vstack(features_list)
+    return X, feature_names
 
 
 def main():
@@ -84,30 +162,43 @@ def main():
         print("=" * 70)
 
         model, tokenizer = load_frozen_model(model_id, device)
+        hidden_size = model.config.hidden_size
 
-        # a) Extract feature vectors
-        X_train = extract_features_batch(
+        # a) Extract COMBINED feature vectors (BERT + linguistic)
+        print("\nExtracting combined features (BERT + linguistic)...")
+
+        X_train, feature_names = extract_combined_features_batch(
             train_df["text"].tolist(), model, tokenizer, device,
-            max_length=config.MAX_LENGTH, overlap=config.OVERLAP_TOKENS,
+            max_length=config.MAX_LENGTH, verbose_every=50,
         )
-        X_val = extract_features_batch(
+        X_val, _ = extract_combined_features_batch(
             val_df["text"].tolist(), model, tokenizer, device,
-            max_length=config.MAX_LENGTH, overlap=config.OVERLAP_TOKENS,
+            max_length=config.MAX_LENGTH, verbose_every=50,
         )
-        X_test = extract_features_batch(
+        X_test, _ = extract_combined_features_batch(
             test_df["text"].tolist(), model, tokenizer, device,
-            max_length=config.MAX_LENGTH, overlap=config.OVERLAP_TOKENS,
+            max_length=config.MAX_LENGTH, verbose_every=50,
         )
 
-        print(f"Feature vector dim: {X_train.shape[1]}")
+        print(f"\nFeature vector dimensions:")
+        print(f"  Interpretable features: 10")
+        print(f"  BERT embedding: {hidden_size}")
+        print(f"  Total: {X_train.shape[1]}")
 
         # b) Save feature vectors
         if config.SAVE_FEATURES:
             os.makedirs(config.FEATURES_DIR, exist_ok=True)
             safe_name = model_id.replace("/", "__")
             for split_name, X in [("train", X_train), ("val", X_val), ("test", X_test)]:
-                path = os.path.join(config.FEATURES_DIR, f"{safe_name}_{split_name}.npy")
+                path = os.path.join(config.FEATURES_DIR, f"{safe_name}_combined_{split_name}.npy")
                 np.save(path, X)
+
+            # Save feature names
+            names_path = os.path.join(config.FEATURES_DIR, f"{safe_name}_feature_names.txt")
+            with open(names_path, 'w') as f:
+                for name in feature_names:
+                    f.write(name + '\n')
+
             print(f"Saved feature vectors to {config.FEATURES_DIR}/")
 
         # c) Train classifier
@@ -120,10 +211,59 @@ def main():
         print(f"\n[VAL]  acc={val_metrics['accuracy']:.4f}  f1={val_metrics['f1']:.4f}  auc={val_metrics['auc']:.4f}")
         print(f"[TEST] acc={test_metrics['accuracy']:.4f}  f1={test_metrics['f1']:.4f}  auc={test_metrics['auc']:.4f}")
 
+        # e) Feature importance (for interpretable features)
+        if hasattr(clf, 'coef_'):
+            print("\nInterpretable feature weights (top 5):")
+            coefs = clf.coef_[0][:10]  # First 10 are interpretable
+            importance = list(zip(feature_names[:10], coefs))
+            importance.sort(key=lambda x: abs(x[1]), reverse=True)
+            for name, weight in importance[:5]:
+                print(f"  {name}: {weight:+.4f}")
+
+        # f) Save trained classifier
+        os.makedirs(os.path.join(config.OUTPUT_DIR, "classifiers"), exist_ok=True)
+        safe_name = model_id.replace("/", "__")
+        clf_path = os.path.join(config.OUTPUT_DIR, "classifiers", f"{safe_name}_classifier.joblib")
+        joblib.dump(clf, clf_path)
+        print(f"Saved classifier to {clf_path}")
+
+        # g) Get impairment scores (0-1 probability) and predictions
+        scores_train = get_impairment_scores(clf, X_train)
+        scores_val = get_impairment_scores(clf, X_val)
+        scores_test = get_impairment_scores(clf, X_test)
+
+        # Show sample scores
+        print("\nSample impairment scores (0=NC, 1=Impaired):")
+        for i in range(min(5, len(scores_test))):
+            label = "Impaired" if y_test[i] == 1 else "NC"
+            print(f"  Sample {i}: score={scores_test[i]:.3f}  (actual: {label})")
+
+        # h) Save predictions and scores for later plotting
+        os.makedirs(os.path.join(config.OUTPUT_DIR, "predictions"), exist_ok=True)
+        predictions = {
+            # True labels
+            "y_train_true": y_train,
+            "y_val_true": y_val,
+            "y_test_true": y_test,
+            # Binary predictions (threshold=0.5)
+            "y_train_pred": clf.predict(X_train),
+            "y_val_pred": clf.predict(X_val),
+            "y_test_pred": clf.predict(X_test),
+            # Impairment scores (0-1 probability)
+            "scores_train": scores_train,
+            "scores_val": scores_val,
+            "scores_test": scores_test,
+        }
+        pred_path = os.path.join(config.OUTPUT_DIR, "predictions", f"{safe_name}_predictions.npz")
+        np.savez(pred_path, **predictions)
+        print(f"Saved predictions and scores to {pred_path}")
+
         results_rows.append({
             "model": model_id,
             "model_name": model_name,
             "feature_dim": X_train.shape[1],
+            "interpretable_features": 10,
+            "bert_embedding_dim": hidden_size,
             "pooling": config.POOLING,
             "max_length": config.MAX_LENGTH,
             "overlap_tokens": config.OVERLAP_TOKENS,
@@ -142,7 +282,7 @@ def main():
 
     # ── 5) Save results ──
     results_df = pd.DataFrame(results_rows)
-    results_path = os.path.join(config.OUTPUT_DIR, "results.csv")
+    results_path = os.path.join(config.OUTPUT_DIR, "results_combined_features.csv")
     results_df.to_csv(results_path, index=False)
     print(f"\nSaved: {results_path}")
     print(results_df.to_string(index=False))
