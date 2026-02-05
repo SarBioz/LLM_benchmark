@@ -9,7 +9,10 @@ SEED = 42
 
 # --- Data ---
 # NEW: Path to folder containing Normal/ and MCI/ subfolders with .txt files
-DATA_DIR = r"D:\path\to\your\data"  # <-- UPDATE THIS to your real data folder
+# For Mac:
+DATA_DIR = "/Users/sajjadilab/Desktop/adrc/ADRC Audio+Text by 1st Language/Manually Checked Text (AD)"
+# For Windows (update path as needed):
+# DATA_DIR = r"D:\path\to\your\data"
 
 # OLD (dummy data): People's Speech parquet files
 # DATA_DIR = r"D:\hf_cache\hub\datasets--MLCommons--peoples_speech\snapshots\f10597c5d3d3a63f8b6827701297c3afdf178272\clean"

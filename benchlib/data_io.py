@@ -16,13 +16,15 @@ def load_text_files_from_folders(data_dir: str, max_rows: int = None) -> pd.Data
     Expected folder structure:
         data_dir/
             Normal/
-                file1.txt
-                file2.txt
-                ...
+                English 1st Language/
+                    file1.txt
+                    file2.txt
+                    ...
             MCI/
-                file1.txt
-                file2.txt
-                ...
+                English 1st Language/
+                    file1.txt
+                    file2.txt
+                    ...
 
     Args:
         data_dir: Path to the folder containing Normal/ and MCI/ subfolders
@@ -34,7 +36,7 @@ def load_text_files_from_folders(data_dir: str, max_rows: int = None) -> pd.Data
     records = []
 
     # Load Normal folder → label "NC"
-    normal_dir = os.path.join(data_dir, "Normal")
+    normal_dir = os.path.join(data_dir, "Normal", "English 1st Language")
     if os.path.exists(normal_dir):
         for filename in os.listdir(normal_dir):
             if filename.endswith(".txt"):
@@ -46,12 +48,12 @@ def load_text_files_from_folders(data_dir: str, max_rows: int = None) -> pd.Data
                     "text": text,
                     "label": "NC"
                 })
-        print(f"Loaded {len([r for r in records if r['label'] == 'NC'])} files from Normal/")
+        print(f"Loaded {len([r for r in records if r['label'] == 'NC'])} files from Normal/English 1st Language/")
     else:
         print(f"Warning: Normal folder not found at {normal_dir}")
 
     # Load MCI folder → label "MCI"
-    mci_dir = os.path.join(data_dir, "MCI")
+    mci_dir = os.path.join(data_dir, "MCI", "English 1st Language")
     if os.path.exists(mci_dir):
         mci_count_before = len(records)
         for filename in os.listdir(mci_dir):
@@ -64,7 +66,7 @@ def load_text_files_from_folders(data_dir: str, max_rows: int = None) -> pd.Data
                     "text": text,
                     "label": "MCI"
                 })
-        print(f"Loaded {len(records) - mci_count_before} files from MCI/")
+        print(f"Loaded {len(records) - mci_count_before} files from MCI/English 1st Language/")
     else:
         print(f"Warning: MCI folder not found at {mci_dir}")
 
