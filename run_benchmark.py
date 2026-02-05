@@ -18,12 +18,23 @@ from typing import List, Tuple
 
 import config
 from models import MODEL_REGISTRY
-from benchlib.data_io import load_people_speech_parquet, dataset_to_transcripts_df
-from benchlib.labels import (
-    assign_random_labels_per_participant,
-    save_participant_label_map,
-    make_binary_label,
-)
+
+# NEW: Import for real data (text files from folders)
+from benchlib.data_io import load_text_files_from_folders
+
+# OLD (dummy data): Import for parquet files
+# from benchlib.data_io import load_people_speech_parquet, dataset_to_transcripts_df
+
+# NEW: Import only make_binary_label (labels come from folder structure)
+from benchlib.labels import make_binary_label
+
+# OLD (dummy data): Imports for random label assignment
+# from benchlib.labels import (
+#     assign_random_labels_per_participant,
+#     save_participant_label_map,
+#     make_binary_label,
+# )
+
 from benchlib.splits import make_participant_splits, attach_splits
 from benchlib.feature_extraction import extract_features_batch
 from benchlib.linguistic_features import (
@@ -116,22 +127,33 @@ def main():
     print(f"Device: {device}")
 
     # ── 1) Load data ──
-    ds = load_people_speech_parquet(config.DATA_DIR)
-    df = dataset_to_transcripts_df(ds, id_col="id", text_col="text", max_rows=config.MAX_ROWS)
+    # NEW: Load real data from Normal/ and MCI/ folders (labels from folder structure)
+    df = load_text_files_from_folders(config.DATA_DIR, max_rows=config.MAX_ROWS)
     print(f"\nTranscripts: {len(df)}")
 
-    # ── 2) Labels (debug) ──
-    df = assign_random_labels_per_participant(
-        df, participant_col="participant_id", label_col="label_debug",
-        labels=("NC", "CIND", "AD"), seed=config.SEED,
-    )
+    # OLD (dummy data): Load parquet files and assign random labels
+    # ds = load_people_speech_parquet(config.DATA_DIR)
+    # df = dataset_to_transcripts_df(ds, id_col="id", text_col="text", max_rows=config.MAX_ROWS)
+    # print(f"\nTranscripts: {len(df)}")
+
+    # ── 2) Labels ──
+    # NEW: Convert labels to binary (labels already in df from folder structure)
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
-    save_participant_label_map(
-        df, participant_col="participant_id", label_col="label_debug",
-        out_path=os.path.join(config.OUTPUT_DIR, "participant_labels_debug.csv"),
-    )
-    df = make_binary_label(df, src_label_col="label_debug", out_col="y")
+    df = make_binary_label(df, src_label_col="label", out_col="y")
     print("Class balance:", df["y"].value_counts().to_dict())
+
+    # OLD (dummy data): Random label assignment
+    # df = assign_random_labels_per_participant(
+    #     df, participant_col="participant_id", label_col="label_debug",
+    #     labels=("NC", "CIND", "AD"), seed=config.SEED,
+    # )
+    # os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+    # save_participant_label_map(
+    #     df, participant_col="participant_id", label_col="label_debug",
+    #     out_path=os.path.join(config.OUTPUT_DIR, "participant_labels_debug.csv"),
+    # )
+    # df = make_binary_label(df, src_label_col="label_debug", out_col="y")
+    # print("Class balance:", df["y"].value_counts().to_dict())
 
     # ── 3) Split by participant ──
     split_df = make_participant_splits(
@@ -233,9 +255,9 @@ def main():
         scores_test = get_impairment_scores(clf, X_test)
 
         # Show sample scores
-        print("\nSample impairment scores (0=NC, 1=Impaired):")
+        print("\nSample impairment scores (0=NC, 1=MCI):")
         for i in range(min(5, len(scores_test))):
-            label = "Impaired" if y_test[i] == 1 else "NC"
+            label = "MCI" if y_test[i] == 1 else "NC"
             print(f"  Sample {i}: score={scores_test[i]:.3f}  (actual: {label})")
 
         # h) Save predictions and scores for later plotting

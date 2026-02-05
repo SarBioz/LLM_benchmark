@@ -8,8 +8,13 @@ import os
 SEED = 42
 
 # --- Data ---
-DATA_DIR = r"D:\hf_cache\hub\datasets--MLCommons--peoples_speech\snapshots\f10597c5d3d3a63f8b6827701297c3afdf178272\clean"
-MAX_ROWS = 2000
+# NEW: Path to folder containing Normal/ and MCI/ subfolders with .txt files
+DATA_DIR = r"D:\path\to\your\data"  # <-- UPDATE THIS to your real data folder
+
+# OLD (dummy data): People's Speech parquet files
+# DATA_DIR = r"D:\hf_cache\hub\datasets--MLCommons--peoples_speech\snapshots\f10597c5d3d3a63f8b6827701297c3afdf178272\clean"
+
+MAX_ROWS = None  # Set to None to use all data, or a number to limit
 
 # --- Splits (participant-level) ---
 TRAIN_FRAC = 0.70
